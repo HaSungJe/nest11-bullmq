@@ -1,7 +1,12 @@
-import { HttpException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker, QueueEvents } from 'bullmq';
+import { InjectBullBoard } from '@bull-board/nestjs';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import type { createBullBoard } from '@bull-board/api';
 import { queueProcessingContext } from './queue-processing.context';
 import { setGlobalQueueRegistry } from './use-queue.decorator';
+
+type BullBoardInstance = ReturnType<typeof createBullBoard>;
 
 interface JobHandler {
     serviceInstance: any;
@@ -19,9 +24,13 @@ interface ConsumerSet {
 export class WriteQueueRegistry implements OnModuleInit, OnModuleDestroy {
     private readonly consumers = new Map<string, ConsumerSet>();
     private readonly connection = {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT) || 6379,
+        host: process.env.BULLMQ_REDIS_HOST || 'localhost',
+        port: parseInt(process.env.BULLMQ_REDIS_PORT) || 6379,
     };
+
+    constructor(
+        @InjectBullBoard() private readonly boardServer: BullBoardInstance,
+    ) {}
 
     /**
      * 앱 시작 시 전역 싱글톤으로 등록
@@ -34,19 +43,21 @@ export class WriteQueueRegistry implements OnModuleInit, OnModuleDestroy {
     /**
      * consumerKey에 해당하는 ConsumerSet 반환.
      * 없으면 Queue + Worker + QueueEvents 생성.
+     * QueueEvents는 waitUntilReady()로 연결 완료를 보장한 뒤 반환.
      * jobKey → handler는 항상 갱신 (Worker 생성 후 추가도 가능, Map 참조 공유).
      */
-    private getOrCreate(
+    private async getOrCreate(
         consumerKey: string,
         jobKey: string,
         serviceInstance: any,
         originalFn: Function,
-    ): ConsumerSet {
+    ): Promise<ConsumerSet> {
         if (!this.consumers.has(consumerKey)) {
             const handlers = new Map<string, JobHandler>();
             const queue = new Queue(consumerKey, { connection: this.connection });
             const queueEvents = new QueueEvents(consumerKey, { connection: this.connection });
 
+            // 큐에서 job을 꺼내 순차적으로 실행하는 곳 (concurrency:1 → FIFO 보장)
             const worker = new Worker(
                 consumerKey,
                 async (job) => {
@@ -60,13 +71,11 @@ export class WriteQueueRegistry implements OnModuleInit, OnModuleDestroy {
                             handler.originalFn.apply(handler.serviceInstance, job.data.args),
                         );
                     } catch (e) {
-                        // HttpException 정보를 returnValue로 보존
-                        // (BullMQ failedReason은 문자열이라 status code 유실됨)
-                        return {
-                            __queueError: true,
-                            status: e?.getStatus?.() ?? 500,
-                            response: e?.getResponse?.() ?? { message: e.message },
-                        };
+                        // 에러 정보를 JSON으로 직렬화 후 throw → job "실패" 처리
+                        // dispatch()에서 역직렬화 후 원본 HttpException 재현
+                        const status = e?.getStatus?.() ?? 500;
+                        const response = e?.getResponse?.() ?? { message: e.message };
+                        throw new Error(JSON.stringify({ status, response }));
                     }
                 },
                 {
@@ -74,6 +83,13 @@ export class WriteQueueRegistry implements OnModuleInit, OnModuleDestroy {
                     concurrency: 1,   // 같은 consumer 내 FIFO 직렬 보장
                 },
             );
+
+            // QueueEvents가 Redis에 완전히 연결된 후 job을 추가해야
+            // waitUntilFinished에서 completion 이벤트를 놓치지 않음
+            await queueEvents.waitUntilReady();
+
+            // Bull-board에 동적으로 큐 등록 — 대시보드에서 이력 확인 가능
+            this.boardServer.addQueue(new BullMQAdapter(queue));
 
             this.consumers.set(consumerKey, { queue, worker, queueEvents, handlers });
         }
@@ -101,14 +117,26 @@ export class WriteQueueRegistry implements OnModuleInit, OnModuleDestroy {
         originalFn: Function,
         args: any[],
     ): Promise<T> {
-        const { queue, queueEvents } = this.getOrCreate(consumerKey, jobKey, serviceInstance, originalFn);
-        const job = await queue.add(jobKey, { args });
-        const result = await job.waitUntilFinished(queueEvents);
-
-        if (result?.__queueError) {
-            throw new HttpException(result.response, result.status);
+        try {
+            const { queue, queueEvents } = await this.getOrCreate(consumerKey, jobKey, serviceInstance, originalFn);
+            const job = await queue.add(jobKey, { args }, {
+                removeOnComplete: { count: 100 },  // 완료 job 최대 100개 보존
+                removeOnFail: { count: 100 },       // 실패 job 최대 100개 보존
+            });
+            return await job.waitUntilFinished(queueEvents);
+        } catch (e) {
+            // Worker에서 직렬화한 HttpException 정보 복원
+            try {
+                const { status, response } = JSON.parse(e.message);
+                throw new HttpException(response, status);
+            } catch (parseError) {
+                // HttpException은 그대로 re-throw
+                if (parseError instanceof HttpException) throw parseError;
+                // JSON 파싱 실패 = BullMQ 인프라 에러 (Redis 연결 실패 등)
+                console.error(`[WriteQueueRegistry] dispatch error - consumer: ${consumerKey}, job: ${jobKey}`, e);
+                throw new HttpException({ message: e.message }, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
         }
-        return result;
     }
 
     /**

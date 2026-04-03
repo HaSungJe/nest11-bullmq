@@ -3,7 +3,7 @@ services:
     image: redis:7-alpine
     container_name: nest11-redis
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${BULLMQ_REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes

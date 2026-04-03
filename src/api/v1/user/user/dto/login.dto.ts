@@ -33,7 +33,7 @@ export class LoginDto {
 
         // headers로 모바일 정보 얻기
         this.ip = data['ip'] ? data['ip'] : null;
-        this.agent = data['agent'].toLowerCase();
+        this.agent = data['agent'] ? data['agent'].toLowerCase() : '';
 
         if (data['mobile_yn'] && data['mobile_yn'] === 'Y') {
             this.device_type = 'M';

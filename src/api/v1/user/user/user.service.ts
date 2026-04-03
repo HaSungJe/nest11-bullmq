@@ -102,6 +102,7 @@ export class UserService {
                 access_token_end_dt: accessTokenEXP
             }
         } catch (error) {
+            console.log(error)
             throw new HttpException({message: '요청이 실패했습니다. 관리자에게 문의해주세요.'}, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
