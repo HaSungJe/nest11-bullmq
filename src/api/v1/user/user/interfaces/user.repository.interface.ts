@@ -20,11 +20,10 @@ export interface UserRepositoryInterface {
     /**
      * 회원 수
      * 
-     * @param type 
      * @param option 
      * @returns 
      */
-    getCount(type: string, option: FindManyOptions<UserEntity>): Promise<void | ApiBadRequestResultDto>;
+    getCount(option: FindManyOptions<UserEntity>): Promise<number>;
 
     /**
      * 아이디로 회원정보 조회
@@ -53,9 +52,9 @@ export interface UserRepositoryInterface {
      * 회원정보 수정
      * 
      * @param user_id 
-     * @param dto 
+     * @param user 
      */
-    putUserInfo(user_id: string, dto: PutUserInfoDto): Promise<void>;
+    putUserInfo(user_id: string, user: UserEntity): Promise<void>;
 
     /**
      * 회원탈퇴

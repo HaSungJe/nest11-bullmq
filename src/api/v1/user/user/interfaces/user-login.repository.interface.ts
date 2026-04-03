@@ -18,7 +18,7 @@ export interface UserLoginRepositoryInterface {
     getLoginInfo(refresh_token: string): Promise<LoginUserDataType | null>;
 
     /**
-     * 로그인 이력 저장
+     * 로그인
      * 
      * @param login 
      */

@@ -1,4 +1,4 @@
-import { USER_REPOSITORY, USER_LOGIN_REPOSITORY, ADMIN_USER_REPOSITORY } from './user.symbols';
+import { USER_REPOSITORY, USER_LOGIN_REPOSITORY, ADMIN_USER_REPOSITORY, USER_LOGIN_HISTORY_REPOSITORY } from './user.symbols';
 import { Module, SetMetadata } from '@nestjs/common';
 import { UserService } from './user/user.service';
 import { UserController } from './user/user.controller';
@@ -14,6 +14,8 @@ import { UserLoginEntity } from './entities/user-login.entity';
 import { UserRepository } from './user/repositories/user.repository';
 import { UserLoginRepository } from './user/repositories/user-login.repository';
 import { AdminUserRepository } from './admin/repositories/admin.user.repository';
+import { UserLoginHistoryEntity } from './entities/user-login-history.entity';
+import { UserLoginHistoryRepository } from './user/repositories/user-login-history.repository';
 
 @SetMetadata('type', 'API')
 @SetMetadata('description', '회원')
@@ -25,7 +27,8 @@ import { AdminUserRepository } from './admin/repositories/admin.user.repository'
             UserEntity,
             StateEntity,
             AuthEntity,
-            UserLoginEntity
+            UserLoginEntity,
+            UserLoginHistoryEntity
         ]),
         PassportJwtAuthModule
     ],
@@ -44,6 +47,10 @@ import { AdminUserRepository } from './admin/repositories/admin.user.repository'
         {
             provide: ADMIN_USER_REPOSITORY,
             useClass: AdminUserRepository
+        },
+        {
+            provide: USER_LOGIN_HISTORY_REPOSITORY,
+            useClass: UserLoginHistoryRepository
         }
     ],
 })

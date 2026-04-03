@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { FindManyOptions, Repository } from 'typeorm';
 import { UserEntity } from '../../entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -17,20 +17,14 @@ export class UserRepository implements UserRepositoryInterface {
     /**
      * 회원 수
      * 
-     * @param type 
      * @param option 
      * @returns 
      */
-    async getCount(type: 'login_id' | 'nickname', option: FindManyOptions<UserEntity>): Promise<void> {
+    async getCount(option: FindManyOptions<UserEntity>): Promise<number> {
         try {
-            const count = await this.repository.count(option);
-            if (count > 0) {
-                const typeName: string = type === 'login_id' ? '아이디' : '닉네임';
-                const validationErrors = createValidationError(type, `이미 사용중인 ${typeName}입니다.`);
-                throw new HttpException({ message: `이미 사용중인 ${typeName}입니다.`, validationErrors }, HttpStatus.BAD_REQUEST);
-            }
+            return await this.repository.count(option);
         } catch (error) {
-            throw error;
+            throw new InternalServerErrorException({message: '조건에 맞는 회원 검색 중 오류가 발생했습니다. 관리자에게 문의해주세요.'});
         }
     }
 
@@ -60,7 +54,7 @@ export class UserRepository implements UserRepositoryInterface {
             builder.where('u.login_id = :login_id', { login_id });
             return builder.getRawOne<FindUserType>();
         } catch (error) {
-            throw error;
+            throw new InternalServerErrorException({message: '회원정보 조회에 실패했습니다. 관리자에게 문의해주세요.'});
         }
     }
 
@@ -77,13 +71,13 @@ export class UserRepository implements UserRepositoryInterface {
             if (error.errno === 1062 && error.sqlMessage.indexOf('Unique_User_nickname') !== -1) {
                 const message: string = '이미 사용중인 닉네임입니다.';
                 const validationErrors: Array<ValidationErrorDto> = createValidationError('nickname', message);
-                throw new HttpException({ message, validationErrors }, HttpStatus.BAD_REQUEST);
+                throw new BadRequestException({message, validationErrors})
             } else if (error.errno === 1062 && error.sqlMessage.indexOf('Unique_User_loginId') !== -1) {
                 const message: string = '이미 사용중인 아이디입니다.';
                 const validationErrors: Array<ValidationErrorDto> = createValidationError('login_id', message);
-                throw new HttpException({ message, validationErrors }, HttpStatus.BAD_REQUEST);
+                throw new BadRequestException({message, validationErrors})
             } else {
-                throw error;
+                throw new InternalServerErrorException({message: '회원가입 처리에 실패했습니다. 관리자에게 문의해주세요.'});
             }
         }
     }
@@ -92,18 +86,18 @@ export class UserRepository implements UserRepositoryInterface {
      * 회원정보 수정
      * 
      * @param user_id 
-     * @param dto 
+     * @param user 
      */
-    async putUserInfo(user_id: string, dto: PutUserInfoDto): Promise<void> {
+    async putUserInfo(user_id: string, user: UserEntity): Promise<void> {
         try {
-            await this.repository.update(user_id, dto);
+            await this.repository.update(user_id, user);
         } catch (error) {
             if (error.errno === 1062 && error.sqlMessage.indexOf('Unique_User_nickname') !== -1) {
                 const message: string = '이미 사용중인 닉네임입니다.';
                 const validationErrors: Array<ValidationErrorDto> = createValidationError('nickname', message);
-                throw new HttpException({ message, validationErrors }, HttpStatus.BAD_REQUEST);
+                throw new BadRequestException({message, validationErrors})
             } else {
-                throw error;
+                throw new InternalServerErrorException({message: '회원정보 수정 처리에 실패했습니다. 관리자에게 문의해주세요.'});
             }
         }
     }
@@ -121,10 +115,9 @@ export class UserRepository implements UserRepositoryInterface {
             if (error.errno === 1062 && error.sqlMessage.indexOf('Unique_User_nickname') !== -1) {
                 const message: string = '이미 사용중인 닉네임입니다.';
                 const validationErrors: Array<ValidationErrorDto> = createValidationError('nickname', message);
-                throw new HttpException({ message, validationErrors }, HttpStatus.BAD_REQUEST);
+                throw new BadRequestException({message, validationErrors})
             } else {
-                const message: string = '요청이 실패했습니다. 관리자에게 문의해주세요.';
-                throw new HttpException({ message }, HttpStatus.INTERNAL_SERVER_ERROR);
+                throw new InternalServerErrorException({message: '닉네임 변경 처리에 실패했습니다. 관리자에게 문의해주세요.'});
             }
         }
     }
@@ -138,7 +131,7 @@ export class UserRepository implements UserRepositoryInterface {
         try {
             await this.repository.update(user_id, { state_id: 'LEAVE' });
         } catch (error) {
-            throw error;
+            throw new InternalServerErrorException({message: '회원탈퇴 처리에 실패했습니다. 관리자에게 문의해주세요.'});
         }
     }
 }
