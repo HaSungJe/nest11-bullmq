@@ -110,7 +110,9 @@ export class UserRepository implements UserRepositoryInterface {
      */
     async patchNickname(user_id: string, nickname: string): Promise<void> {
         try {
-            await this.repository.update(user_id, { nickname });
+            const entity = new UserEntity();
+            entity.nickname = nickname;
+            await this.repository.update(user_id, entity);
         } catch (error) {
             if (error.errno === 1062 && error.sqlMessage.indexOf('Unique_User_nickname') !== -1) {
                 const message: string = '이미 사용중인 닉네임입니다.';
@@ -129,7 +131,9 @@ export class UserRepository implements UserRepositoryInterface {
      */
     async leave(user_id: string): Promise<void> {
         try {
-            await this.repository.update(user_id, { state_id: 'LEAVE' });
+            const entity = new UserEntity();
+            entity.state_id = 'LEAVE';
+            await this.repository.update(user_id, entity);
         } catch (error) {
             throw new InternalServerErrorException({message: '회원탈퇴 처리에 실패했습니다. 관리자에게 문의해주세요.'});
         }

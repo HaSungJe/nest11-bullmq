@@ -118,7 +118,7 @@ src/modules/queue/
 
 ### `@UseQueue(consumerKey, jobKey)` 사용 규칙
 
-- **적용 대상**: INSERT/UPDATE/DELETE Service 메서드만 — `@UseQueue`가 없는 메서드는 큐 미사용
+- **적용 대상**: 여러 사용자 간 순서 보장이 필요한 INSERT/UPDATE/DELETE 메서드 — 개인 단위 기능(로그인, 탈퇴 등)은 적용 불필요
 - **데코레이터 순서**: `@UseQueue` 반드시 `@Transactional()` **위**에 배치
   ```typescript
   @UseQueue('user-consumer', 'user-service-sign')  // ← 위 (바깥 래퍼)
@@ -131,7 +131,7 @@ src/modules/queue/
 ### consumerKey 명명 예시
 | 도메인 | consumerKey | jobKey 예시 |
 |--------|-------------|-------------|
-| 회원 | `user-consumer` | `user-service-sign`, `user-service-leave` |
+| 회원 | `user-consumer` | `user-service-sign`, `user-service-patch-nickname` |
 | 게시판 | `board-consumer` | `board-insert`, `board-update`, `board-delete` |
 
 ### 서버 시작 시 큐 사전 생성

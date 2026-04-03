@@ -1,5 +1,5 @@
 import type { FindUserType, UserRepositoryInterface } from './interfaces/user.repository.interface';
-import type { UserLoginRepositoryInterface } from './interfaces/user-login.repository.interface';
+import type { LoginUserDataType, UserLoginRepositoryInterface } from './interfaces/user-login.repository.interface';
 import type { UserLoginHistoryRepositoryInterface } from './interfaces/user-login-history.repository.interface';
 import { UseQueue } from '@root/modules/queue/use-queue.decorator';
 import { USER_REPOSITORY, USER_LOGIN_REPOSITORY, USER_LOGIN_HISTORY_REPOSITORY } from '../user.symbols';
@@ -126,15 +126,6 @@ export class UserService {
      */
     @Transactional()
     async refresh(dto: RefreshDto): Promise<RefreshResultDto | ApiBadRequestResultDto | ApiFailResultDto> {
-        type LoginUserDataType = {
-            user_id: string;
-            user_login_id: string;
-            access_token: string;
-            refresh_token: string;
-            auth_id: string;
-            login_able_yn: string;
-        }
-
         // 1. 토큰 검증 (만료/서명 오류 등 JWT 라이브러리 에러 → 401)
         let refreshTokenPayload: any;
         try {

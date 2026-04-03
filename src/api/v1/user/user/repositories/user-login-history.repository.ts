@@ -28,6 +28,7 @@ export class UserLoginHistoryRepository implements UserLoginHistoryRepositoryInt
      * 기존 로그인 이력의 refresh_token_end_dt 단축
      *
      * @param refresh_token
+     * @param minute 단축할 분 (현재시간 + minute)
      */
     async updateRefreshTokenEndDt(refresh_token: string, minute: number): Promise<void> {
         try {
