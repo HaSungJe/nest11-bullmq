@@ -101,10 +101,11 @@ src/
 ## BullMQ (Write FIFO Queue)
 
 ### 인프라
-- Redis: `docker-compose.yml` → `docker compose up -d`
+- Redis: `docker-compose.yml` → `npm run redis:up` / `npm run redis:down`
 - `.env`: `BULLMQ_REDIS_HOST`, `BULLMQ_REDIS_PORT` 필수
-- 패키지: `@nestjs/bullmq`, `bullmq`
+- 패키지: `@nestjs/bullmq`, `bullmq`, `@bull-board/api`, `@bull-board/nestjs`, `@bull-board/express`
 - `QueueModule` (`@Global`) → `app.module.ts` 최상단 import
+- Bull Board 대시보드: `/queues`
 
 ### 핵심 파일
 ```
@@ -132,6 +133,11 @@ src/modules/queue/
 |--------|-------------|-------------|
 | 회원 | `user-consumer` | `user-service-sign`, `user-service-leave` |
 | 게시판 | `board-consumer` | `board-insert`, `board-update`, `board-delete` |
+
+### 서버 시작 시 큐 사전 생성
+- `@UseQueue` 데코레이터 적용 시점(클래스 로드)에 consumerKey가 정적으로 수집됨
+- `WriteQueueRegistry.onModuleInit()`에서 수집된 모든 consumerKey의 Queue/Worker를 미리 생성
+- 서버 시작 직후 bull-board(`/queues`)에서 이전 이력 즉시 확인 가능
 
 ### 신규 도메인 적용
 1. Service write 메서드에 `@UseQueue('xxx-consumer', 'xxx-job')` 추가만
