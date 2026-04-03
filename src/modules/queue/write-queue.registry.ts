@@ -4,7 +4,7 @@ import { InjectBullBoard } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import type { createBullBoard } from '@bull-board/api';
 import { queueProcessingContext } from './queue-processing.context';
-import { setGlobalQueueRegistry } from './use-queue.decorator';
+import { setGlobalQueueRegistry, getRegisteredConsumerKeys } from './use-queue.decorator';
 
 type BullBoardInstance = ReturnType<typeof createBullBoard>;
 
@@ -33,11 +33,14 @@ export class WriteQueueRegistry implements OnModuleInit, OnModuleDestroy {
     ) {}
 
     /**
-     * 앱 시작 시 전역 싱글톤으로 등록
-     * @UseQueue 데코레이터가 DI 없이 접근할 수 있도록 함
+     * 앱 시작 시 전역 싱글톤 등록 + @UseQueue가 선언된 모든 consumerKey의 큐를 사전 생성.
+     * 서버 시작 직후 bull-board에서 이전 이력을 바로 확인할 수 있도록 함.
      */
-    onModuleInit(): void {
+    async onModuleInit(): Promise<void> {
         setGlobalQueueRegistry(this);
+        for (const consumerKey of getRegisteredConsumerKeys()) {
+            await this.ensureConsumer(consumerKey);
+        }
     }
 
     /**
@@ -46,53 +49,61 @@ export class WriteQueueRegistry implements OnModuleInit, OnModuleDestroy {
      * QueueEvents는 waitUntilReady()로 연결 완료를 보장한 뒤 반환.
      * jobKey → handler는 항상 갱신 (Worker 생성 후 추가도 가능, Map 참조 공유).
      */
+    /**
+     * consumerKey에 해당하는 ConsumerSet이 없으면 생성 후 bull-board에 등록.
+     * onModuleInit(사전 생성)과 dispatch(지연 생성 fallback) 양쪽에서 호출.
+     */
+    private async ensureConsumer(consumerKey: string): Promise<void> {
+        if (this.consumers.has(consumerKey)) return;
+
+        const handlers = new Map<string, JobHandler>();
+        const queue = new Queue(consumerKey, { connection: this.connection });
+        const queueEvents = new QueueEvents(consumerKey, { connection: this.connection });
+
+        // 큐에서 job을 꺼내 순차적으로 실행하는 곳 (concurrency:1 → FIFO 보장)
+        const worker = new Worker(
+            consumerKey,
+            async (job) => {
+                const handler = handlers.get(job.name);
+                if (!handler) {
+                    throw new Error(`[WriteQueueRegistry] No handler for job: ${job.name} in consumer: ${consumerKey}`);
+                }
+
+                try {
+                    return await queueProcessingContext.run(true, () =>
+                        handler.originalFn.apply(handler.serviceInstance, job.data.args),
+                    );
+                } catch (e) {
+                    // 에러 정보를 JSON으로 직렬화 후 throw → job "실패" 처리
+                    // dispatch()에서 역직렬화 후 원본 HttpException 재현
+                    const status = e?.getStatus?.() ?? 500;
+                    const response = e?.getResponse?.() ?? { message: e.message };
+                    throw new Error(JSON.stringify({ status, response }));
+                }
+            },
+            {
+                connection: this.connection,
+                concurrency: 1,   // 같은 consumer 내 FIFO 직렬 보장
+            },
+        );
+
+        // QueueEvents가 Redis에 완전히 연결된 후 job을 추가해야
+        // waitUntilFinished에서 completion 이벤트를 놓치지 않음
+        await queueEvents.waitUntilReady();
+
+        // Bull-board에 큐 등록 — 대시보드에서 이력 확인 가능
+        this.boardServer.addQueue(new BullMQAdapter(queue));
+
+        this.consumers.set(consumerKey, { queue, worker, queueEvents, handlers });
+    }
+
     private async getOrCreate(
         consumerKey: string,
         jobKey: string,
         serviceInstance: any,
         originalFn: Function,
     ): Promise<ConsumerSet> {
-        if (!this.consumers.has(consumerKey)) {
-            const handlers = new Map<string, JobHandler>();
-            const queue = new Queue(consumerKey, { connection: this.connection });
-            const queueEvents = new QueueEvents(consumerKey, { connection: this.connection });
-
-            // 큐에서 job을 꺼내 순차적으로 실행하는 곳 (concurrency:1 → FIFO 보장)
-            const worker = new Worker(
-                consumerKey,
-                async (job) => {
-                    const handler = handlers.get(job.name);
-                    if (!handler) {
-                        throw new Error(`[WriteQueueRegistry] No handler for job: ${job.name} in consumer: ${consumerKey}`);
-                    }
-
-                    try {
-                        return await queueProcessingContext.run(true, () =>
-                            handler.originalFn.apply(handler.serviceInstance, job.data.args),
-                        );
-                    } catch (e) {
-                        // 에러 정보를 JSON으로 직렬화 후 throw → job "실패" 처리
-                        // dispatch()에서 역직렬화 후 원본 HttpException 재현
-                        const status = e?.getStatus?.() ?? 500;
-                        const response = e?.getResponse?.() ?? { message: e.message };
-                        throw new Error(JSON.stringify({ status, response }));
-                    }
-                },
-                {
-                    connection: this.connection,
-                    concurrency: 1,   // 같은 consumer 내 FIFO 직렬 보장
-                },
-            );
-
-            // QueueEvents가 Redis에 완전히 연결된 후 job을 추가해야
-            // waitUntilFinished에서 completion 이벤트를 놓치지 않음
-            await queueEvents.waitUntilReady();
-
-            // Bull-board에 동적으로 큐 등록 — 대시보드에서 이력 확인 가능
-            this.boardServer.addQueue(new BullMQAdapter(queue));
-
-            this.consumers.set(consumerKey, { queue, worker, queueEvents, handlers });
-        }
+        await this.ensureConsumer(consumerKey);
 
         // Worker 생성 후에도 handler 추가/갱신 가능 (Map 참조 공유)
         this.consumers.get(consumerKey).handlers.set(jobKey, { serviceInstance, originalFn });

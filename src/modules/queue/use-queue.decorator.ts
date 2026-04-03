@@ -4,6 +4,14 @@ import type { WriteQueueRegistry } from './write-queue.registry';
 let _registry: WriteQueueRegistry | null = null;
 
 /**
+ * @UseQueue 데코레이터가 적용된 consumerKey 목록 (클래스 로드 시점에 수집)
+ * onModuleInit에서 큐 사전 생성에 사용
+ */
+const _registeredConsumerKeys = new Set<string>();
+
+export const getRegisteredConsumerKeys = (): ReadonlySet<string> => _registeredConsumerKeys;
+
+/**
  * WriteQueueRegistry 전역 싱글톤 등록
  * WriteQueueRegistry.onModuleInit()에서 호출
  */
@@ -28,6 +36,8 @@ export const getGlobalQueueRegistry = (): WriteQueueRegistry | null => _registry
  *   async method() {}
  */
 export function UseQueue(consumerKey: string, jobKey: string) {
+    _registeredConsumerKeys.add(consumerKey);
+
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
         const originalFn = descriptor.value;
 
