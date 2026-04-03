@@ -47,14 +47,14 @@ MYSQL_PW=1234
 JWT_SECRET=your_jwt_secret
 
 # Redis (BullMQ)
-REDIS_HOST=localhost
-REDIS_PORT=6379
+BULLMQ_REDIS_HOST=localhost
+BULLMQ_REDIS_PORT=6379
 ```
 
 ### 2. Redis 실행 (Docker)
 
 ```bash
-npm run docker:up
+npm run redis:up
 ```
 
 ### 3. 패키지 설치 및 앱 실행
@@ -67,7 +67,7 @@ npm run dev
 ### Redis 종료
 
 ```bash
-npm run docker:down
+npm run redis:down
 ```
 
 ---
@@ -111,6 +111,7 @@ Write API(INSERT/UPDATE/DELETE)의 동시성 문제를 해결하기 위해
 - **컨슈머(consumerKey)** 단위로 Worker 1개, concurrency 1 → FIFO 직렬 처리
 - 다른 consumerKey 간에는 **병렬** 처리
 - 컨트롤러·서비스 호출 코드 **변경 없음** — 데코레이터만 추가
+- **서버 시작 시** `@UseQueue`가 선언된 모든 consumerKey의 큐를 사전 생성 → bull-board에서 이전 이력 즉시 확인 가능
 
 ### 사용법
 
@@ -137,7 +138,20 @@ async sign(dto: SignDto): Promise<void> {
 | `board-consumer` | `board-insert` | 게시판 write 직렬 처리 |
 | `board-consumer` | `board-update` | |
 
-> 별도 설정 불필요 — `@UseQueue` 데코레이터가 붙은 메서드가 **처음 호출될 때** Worker가 자동 생성됩니다.
+> 별도 설정 불필요 — `@UseQueue` 데코레이터 추가만으로 적용됩니다. `app.module.ts`나 `QueueModule` 수정 불필요.
+
+---
+
+## Bull Board (큐 대시보드)
+
+앱 실행 후 bull-board 접속:
+
+```
+http://localhost:${SERVER_PORT}/queues
+```
+
+- 서버 시작 시 모든 큐가 자동 등록되어 이전 이력 즉시 표시
+- 완료/실패 job 각 최대 100개 보존
 
 ---
 
@@ -156,6 +170,6 @@ http://localhost:3001/api-docs
 ```bash
 npm run dev          # 개발 서버 (watch)
 npm run build        # 빌드
-npm run docker:up    # Redis 컨테이너 시작
-npm run docker:down  # Redis 컨테이너 종료
+npm run redis:up     # Redis 컨테이너 시작
+npm run redis:down   # Redis 컨테이너 종료
 ```

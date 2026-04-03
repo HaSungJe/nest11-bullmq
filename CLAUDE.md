@@ -102,7 +102,7 @@ src/
 
 ### 인프라
 - Redis: `docker-compose.yml` → `docker compose up -d`
-- `.env`: `REDIS_HOST`, `REDIS_PORT` 필수
+- `.env`: `BULLMQ_REDIS_HOST`, `BULLMQ_REDIS_PORT` 필수
 - 패키지: `@nestjs/bullmq`, `bullmq`
 - `QueueModule` (`@Global`) → `app.module.ts` 최상단 import
 
