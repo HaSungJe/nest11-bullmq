@@ -22,10 +22,11 @@ export class FirebaseCloudeMessageService {
      * @param body 
      * @param os 
      */
-    async sendFirebaseCloudMessage(token: string, title: string, body: string, os: string): Promise<void> {
+    async sendFirebaseCloudMessage(token: string, title: string, body: string, os: string, data: {link: string}): Promise<void> {
         const message: admin.messaging.Message = {
             token,
-            notification: {title, body}
+            notification: {title, body},
+            data
         };
 
         if (os === 'android') {
@@ -35,7 +36,7 @@ export class FirebaseCloudeMessageService {
             };
         } else if (os === 'ios') {
             message.apns = {
-                payload: {aps: {alert: {title, body}, sound: 'default'}},
+                payload: {aps: {alert: {title, body}, sound: 'default'}, data},
                 headers: {'apns-priority': '10'},
             };
         }
