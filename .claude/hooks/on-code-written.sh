@@ -1,6 +1,6 @@
 #!/bin/bash
 
-JQ="/c/Users/timec_hbdlyor/AppData/Local/Microsoft/WinGet/Packages/jqlang.jq_Microsoft.Winget.Source_8wekyb3d8bbwe/jq.exe"
+JQ="$CLAUDE_PROJECT_DIR/.claude/bin/jq.exe"
 
 INPUT=$(cat)
 FILE=$(echo "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')
